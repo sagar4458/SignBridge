@@ -1,0 +1,24 @@
+# Model weights — generate locally by running train.py
+version-1/model/*.pth
+version-2/model/*.pth
+version-2/model/*.npz
+
+# Dataset — download from https://www.kaggle.com/datasets/grassknoted/asl-alphabet
+version-1/data/
+version-2/data/
+
+# Python virtual environments
+version-1/venv/
+version-2/venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env

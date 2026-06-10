@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0a0a0f">
+<link rel="manifest" href="manifest.json">
+<title>SignBridge — Real-Time ASL Interpreter</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+  /* === YOUR EXISTING CSS (unchanged) === */
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  :root {
+    --bg: #0c0c12;
+    --bg-elevated: #111118;
+    --bg-card: #16161f;
+    --border-subtle: #1e1e28;
+    --border-strong: #2a2a35;
+    --text-primary: #ededf5;
+    --text-secondary: #a0a0b8;
+    --text-muted: #5a5a72;
+    --accent: #7c6dff;
+    --accent-glow: rgba(124, 109, 255, 0.2);
+    --success: #00e599;
+    --danger: #ff5c5c;
+    --warning: #ffb347;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --transition: all 0.2s ease;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap');
+
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--border-subtle); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: rgba(12, 12, 18, 0.95);
+    backdrop-filter: blur(8px);
+    flex-shrink: 0;
+    z-index: 10;
+  }
+
+  .brand {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    background: linear-gradient(135deg, #ffffff 0%, #c0b8ff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .brand span { background: linear-gradient(135deg, var(--accent), #b4a9ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .brand-sub {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--text-muted);
+    margin-left: 10px;
+  }
+
+  .right-chips {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 12px;
+    border-radius: 40px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+  }
+  .chip.green { background: rgba(0, 229, 153, 0.08); border-color: rgba(0, 229, 153, 0.25); color: var(--success); }
+  .chip.red { background: rgba(255, 92, 92, 0.08); border-color: rgba(255, 92, 92, 0.25); color: var(--danger); }
+  .pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: pulse 1.8s infinite;
+  }
+  @keyframes pulse { 0% { transform: scale(0.95); opacity: 0.7; } 70% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.95); opacity: 0.7; } }
+
+  .toggle-switch {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-elevated);
+    padding: 4px 8px 4px 12px;
+    border-radius: 40px;
+    border: 1px solid var(--border-subtle);
+    font-size: 12px;
+    cursor: pointer;
+    transition: var(--transition);
+  }
+  .toggle-switch:hover { border-color: var(--accent); }
+  .toggle-slider {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 20px;
+  }
+  .toggle-slider input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--border-strong);
+    transition: 0.3s;
+    border-radius: 20px;
+  }
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 2px;
+    bottom: 2px;
+    background-color: var(--text-primary);
+    transition: 0.3s;
+    border-radius: 50%;
+  }
+  input:checked + .slider { background-color: var(--accent); }
+  input:checked + .slider:before { transform: translateX(20px); }
+  .toggle-label { font-weight: 500; }
+
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 320px 300px;
+    flex: 1;
+    overflow: hidden;
+    gap: 1px;
+    background: var(--border-subtle);
+  }
+  .panel {
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .panel-head {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    background: var(--bg-elevated);
+    flex-shrink: 0;
+  }
+  .panel-body {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .cam-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-subtle);
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+  }
+  .cam-wrap {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    background: #000;
+  }
+  .cam-wrap video, .cam-wrap canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  canvas { z-index: 2; }
+  .cam-badge {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    z-index: 3;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(4px);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .stability-area { display: flex; justify-content: center; margin-top: 8px; }
+  .ring-svg { width: 90px; height: 90px; filter: drop-shadow(0 0 6px var(--accent-glow)); }
+  #ringTrack { stroke: var(--border-strong); stroke-width: 5; }
+  #ringFill {
+    stroke: var(--accent);
+    stroke-width: 5;
+    stroke-dasharray: 219.9;
+    stroke-dashoffset: 219.9;
+    transition: stroke-dashoffset 0.08s linear;
+    transform: rotate(-90deg);
+    transform-origin: center;
+  }
+  #ringLetter { font-size: 26px; font-weight: 800; fill: var(--accent); dominant-baseline: middle; text-anchor: middle; }
+
+  .heatmap-legend {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-elevated);
+    padding: 8px 12px;
+    border-radius: 40px;
+    width: fit-content;
+    margin: 0 auto;
+  }
+  .hm-grad { width: 80px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #1a4a2a, #00ffaa); }
+
+  .prediction-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-subtle);
+    padding: 20px;
+    text-align: center;
+  }
+  .letter-big {
+    font-size: 88px;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--accent);
+    min-height: 110px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.1s ease;
+  }
+  .conf-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary); margin: 12px 0 6px; }
+  .bar { height: 6px; background: var(--border-strong); border-radius: 6px; overflow: hidden; }
+  .bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #b4a9ff); border-radius: 6px; transition: width 0.15s ease; }
+
+  .top3-container { margin-top: 6px; }
+  .top3-item { display: flex; align-items: center; gap: 12px; font-size: 12px; margin-bottom: 8px; }
+  .t3l { width: 28px; font-weight: 700; color: var(--accent); }
+  .t3b { flex: 1; height: 5px; background: var(--border-strong); border-radius: 5px; overflow: hidden; }
+  .t3f { height: 100%; background: linear-gradient(90deg, var(--accent), #a99eff); border-radius: 5px; transition: width 0.15s; }
+  .t3c { width: 42px; text-align: right; color: var(--text-secondary); font-family: monospace; }
+
+  .word-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+  }
+  .slabel {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .word-display {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: 4px;
+    background: var(--bg);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    border: 1px solid var(--border-subtle);
+    min-height: 72px;
+    word-break: break-all;
+  }
+  .cursor {
+    display: inline-block;
+    width: 2px;
+    height: 28px;
+    background: var(--accent);
+    margin-left: 4px;
+    vertical-align: middle;
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+
+  .suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .sug-btn {
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    border-radius: 30px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition);
+  }
+  .sug-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(124,109,255,0.1); transform: translateY(-1px); }
+
+  .sentence-box {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-subtle);
+    padding: 16px;
+    font-size: 15px;
+    line-height: 1.5;
+    min-height: 90px;
+  }
+  .sentence-corrected { font-size: 12px; color: var(--success); margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border-subtle); font-style: italic; }
+
+  .actions { display: flex; flex-direction: column; gap: 10px; }
+  .btn {
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-strong);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+  }
+  .btn:hover { border-color: var(--accent); background: rgba(124,109,255,0.08); transform: translateX(2px); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: white; justify-content: center; }
+  .btn.primary:hover { background: #6b5cdf; transform: scale(0.98); }
+  .btn.danger { border-color: rgba(255,92,92,0.4); color: var(--danger); }
+  .btn-row { display: flex; gap: 10px; }
+  .btn-row .btn { flex: 1; text-align: center; justify-content: center; }
+
+  [data-tooltip] { position: relative; }
+  [data-tooltip]:before {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 10px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 100;
+    margin-bottom: 6px;
+  }
+  [data-tooltip]:hover:before { opacity: 1; }
+
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+  .stat-card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 14px; text-align: center; }
+  .stat-number { font-size: 32px; font-weight: 800; color: var(--accent); line-height: 1.2; }
+  .stat-label { font-size: 10px; color: var(--text-muted); margin-top: 4px; letter-spacing: 0.5px; }
+
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--bg-elevated);
+    border-left: 3px solid var(--accent);
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    transform: translateX(400px);
+    transition: transform 0.3s ease;
+  }
+  .toast.show { transform: translateX(0); }
+  .toast.error { border-left-color: var(--danger); }
+  .toast.success { border-left-color: var(--success); }
+
+  .empty-state { color: var(--text-muted); font-size: 12px; text-align: center; padding: 16px; }
+
+  @media (max-width: 1000px) {
+    .main { grid-template-columns: 1fr 280px 260px; }
+    .panel-body { padding: 16px; gap: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <span class="brand">Sign<span>Bridge</span></span>
+    <span class="brand-sub">v2.0 · Real-Time ASL</span>
+  </div>
+  <div class="right-chips">
+    <div class="toggle-switch" id="cameraToggleBtn">
+      <span class="toggle-label" id="cameraToggleLabel">Camera Off</span>
+      <label class="toggle-slider">
+        <input type="checkbox" id="cameraToggle">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="chip green" id="netChip"><div class="pulse"></div><span id="netText">Online</span></div>
+    <div class="chip green" id="modelChip"><div class="pulse"></div><span id="modelText">Connecting...</span></div>
+    <div class="chip" id="deviceChip">GPU</div>
+  </div>
+</div>
+
+<div class="main">
+  <!-- PANEL 1: CAMERA -->
+  <div class="panel">
+    <div class="panel-head">📷 Live Feed · Attention Heatmap</div>
+    <div class="panel-body">
+      <div class="cam-card">
+        <div class="cam-wrap">
+          <video id="video" autoplay playsinline muted></video>
+          <canvas id="canvas"></canvas>
+          <div class="cam-badge">ViT-Tiny + BiLSTM | MediaPipe</div>
+        </div>
+      </div>
+      <div class="stability-area">
+        <svg class="ring-svg" viewBox="0 0 80 80">
+          <circle id="ringTrack" cx="40" cy="40" r="35" fill="none" stroke-width="5"/>
+          <circle id="ringFill" cx="40" cy="40" r="35" fill="none" stroke-width="5" stroke-linecap="round"/>
+          <text id="ringLetter" x="40" y="46" font-size="24" font-weight="800" fill="#7c6dff" text-anchor="middle">—</text>
+        </svg>
+      </div>
+      <div class="heatmap-legend">
+        <span>🔍 Attention intensity</span>
+        <div class="hm-grad"></div>
+        <span>low → high</span>
+      </div>
+      <button class="btn" id="clearAllBtn" data-tooltip="Clear sentence and word">🗑️ Clear All</button>
+    </div>
+  </div>
+
+  <!-- PANEL 2: PREDICTION + WORD -->
+  <div class="panel">
+    <div class="panel-head">🎯 Prediction & Word Builder</div>
+    <div class="panel-body">
+      <div class="prediction-card">
+        <div class="letter-big" id="letterBig">—</div>
+        <div class="conf-row"><span>Confidence</span><span id="confVal">0%</span></div>
+        <div class="bar"><div class="bar-fill" id="confFill" style="width:0%"></div></div>
+      </div>
+      <div class="top3-container">
+        <div class="slabel">📊 Top 3 Candidates</div>
+        <div id="top3">
+          <div class="top3-item"><span class="t3l">—</span><div class="t3b"><div class="t3f" style="width:0%"></div></div><span class="t3c">—</span></div>
+          <div class="top3-item"><span class="t3l">—</span><div class="t3b"><div class="t3f" style="width:0%"></div></div><span class="t3c">—</span></div>
+          <div class="top3-item"><span class="t3l">—</span><div class="t3b"><div class="t3f" style="width:0%"></div></div><span class="t3c">—</span></div>
+        </div>
+      </div>
+      <div class="word-card">
+        <div class="slabel">✍️ Current Word</div>
+        <div class="word-display" id="wordDisplay"><span class="cursor"></span></div>
+      </div>
+      <div>
+        <div class="slabel">✨ Autocomplete <span style="font-size:9px;">(↑↓ Enter)</span></div>
+        <div class="suggestions" id="suggestions">
+          <span class="empty-state">Start signing to see suggestions</span>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="clearWordBtn" data-tooltip="Clear current word">⌫ Clear Word</button>
+        <button class="btn" id="spaceBtn" data-tooltip="Insert space">␣ Space</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANEL 3: SENTENCE + ACTIONS -->
+  <div class="panel">
+    <div class="panel-head">📝 Sentence & Export</div>
+    <div class="panel-body">
+      <div>
+        <div class="slabel">🧾 Recognized Sentence</div>
+        <div class="sentence-box">
+          <span id="sentenceText" class="empty-state">Your sentence will appear here...</span>
+          <div class="sentence-corrected" id="correctedText"></div>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="speakBtn" data-tooltip="Speak sentence aloud">🔊 Speak Sentence (TTS)</button>
+        <button class="btn" id="llmBtn" data-tooltip="Fix grammar with local LLM">✨ Fix Grammar with LLM</button>
+        <button class="btn" id="exportJsonBtn" data-tooltip="Export session as JSON">📄 Export as JSON</button>
+        <button class="btn" id="exportPdfBtn" data-tooltip="Export session as PDF">📑 Export as PDF</button>
+        <button class="btn danger" id="fullClearBtn" data-tooltip="Clear everything">✕ Clear Everything</button>
+      </div>
+      <div>
+        <div class="slabel">📈 Session Stats</div>
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-number" id="statLetters">0</div><div class="stat-label">LETTERS</div></div>
+          <div class="stat-card"><div class="stat-number" id="statWords">0</div><div class="stat-label">WORDS</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  const socket = io();
+  let video = document.getElementById('video');
+  let canvas = document.getElementById('canvas');
+  let ctx = canvas.getContext('2d');
+  let running = false;
+  let stream = null;
+  let currentSentence = '';
+  let suggestionIndex = -1;
+  let suggestionsList = [];
+
+  const cameraToggle = document.getElementById('cameraToggle');
+  const cameraToggleLabel = document.getElementById('cameraToggleLabel');
+  const clearAllBtn = document.getElementById('clearAllBtn');
+  const clearWordBtn = document.getElementById('clearWordBtn');
+  const spaceBtn = document.getElementById('spaceBtn');
+  const speakBtn = document.getElementById('speakBtn');
+  const llmBtn = document.getElementById('llmBtn');
+  const exportJsonBtn = document.getElementById('exportJsonBtn');
+  const exportPdfBtn = document.getElementById('exportPdfBtn');
+  const fullClearBtn = document.getElementById('fullClearBtn');
+
+  function showToast(message, type = 'info') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = 'toast ' + (type === 'error' ? 'error' : type === 'success' ? 'success' : '');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 3000);
+  }
+
+  // Camera toggle
+  async function startCamera() {
+    // Check if mediaDevices API is available
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showToast('Camera not supported by your browser or insecure origin (use HTTPS or localhost)', 'error');
+      document.getElementById('modelText').textContent = 'Camera Unavailable';
+      cameraToggle.checked = false;
+      cameraToggleLabel.textContent = 'Camera Off';
+      return;
+    }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } });
+      video.srcObject = stream;
+      running = true;
+      cameraToggle.checked = true;
+      cameraToggleLabel.textContent = 'Camera On';
+      loop();
+      showToast('Camera started', 'success');
+    } catch(e) {
+      let errMsg = e.message;
+      if (e.name === 'NotAllowedError') errMsg = 'Camera permission denied';
+      else if (e.name === 'NotFoundError') errMsg = 'No camera found';
+      showToast('Camera error: ' + errMsg, 'error');
+      document.getElementById('modelText').textContent = 'Camera Error';
+      cameraToggle.checked = false;
+      cameraToggleLabel.textContent = 'Camera Off';
+    }
+  }
+
+  function stopCamera() {
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
+      stream = null;
+    }
+    running = false;
+    cameraToggle.checked = false;
+    cameraToggleLabel.textContent = 'Camera Off';
+    // DO NOT clear canvas – keep last frame
+    showToast('Camera stopped', 'info');
+  }
+
+  function toggleCamera() {
+    if (running) {
+      stopCamera();
+    } else {
+      startCamera();
+    }
+  }
+
+  cameraToggle.addEventListener('change', toggleCamera);
+
+  function loop() {
+    if (!running) return;
+    if (video.videoWidth && video.videoHeight) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+      const b64 = canvas.toDataURL('image/jpeg', 0.75);
+      socket.emit('frame', { frame: b64 });
+    }
+    setTimeout(loop, 66);
+  }
+
+  function updateNet() {
+    const chip = document.getElementById('netChip');
+    const txt = document.getElementById('netText');
+    if (navigator.onLine) {
+      chip.className = 'chip green'; txt.textContent = 'Online';
+    } else {
+      chip.className = 'chip red'; txt.textContent = 'Offline';
+    }
+  }
+  window.addEventListener('online', updateNet);
+  window.addEventListener('offline', updateNet);
+
+  socket.on('prediction', (data) => {
+    updatePredictionUI(data);
+    if (data.annotated) {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      img.src = data.annotated;
+    }
+    if (data.word_state) updateWordUI(data.word_state);
+  });
+
+  socket.on('word_update', (state) => updateWordUI(state));
+  socket.on('connect', () => { document.getElementById('modelText').textContent = 'ViT-Tiny · Live'; });
+  socket.on('disconnect', () => { document.getElementById('modelText').textContent = 'Disconnected'; });
+
+  function updatePredictionUI(data) {
+    const letter = data.letter || '—';
+    const conf = data.confidence || 0;
+    document.getElementById('letterBig').textContent = letter;
+    document.getElementById('confVal').textContent = conf + '%';
+    document.getElementById('confFill').style.width = conf + '%';
+
+    const prog = data.hold_progress || 0;
+    const circumference = 219.9;
+    document.getElementById('ringFill').style.strokeDashoffset = circumference * (1 - prog);
+    document.getElementById('ringLetter').textContent = letter !== '—' ? letter : '?';
+
+    if (data.confirmed) {
+      const big = document.getElementById('letterBig');
+      big.style.transform = 'scale(1.05)';
+      setTimeout(() => big.style.transform = '', 200);
+    }
+
+    const top3 = data.top3 || [];
+    const items = document.querySelectorAll('#top3 .top3-item');
+    items.forEach((row, i) => {
+      const item = top3[i] || { letter: '—', conf: 0 };
+      row.querySelector('.t3l').textContent = item.letter;
+      row.querySelector('.t3f').style.width = (item.conf || 0) + '%';
+      row.querySelector('.t3c').textContent = item.conf ? item.conf + '%' : '—';
+    });
+  }
+
+  function updateWordUI(state) {
+    const word = state.current_word || '';
+    document.getElementById('wordDisplay').innerHTML = word + '<span class="cursor"></span>';
+
+    const sugEl = document.getElementById('suggestions');
+    suggestionsList = state.suggestions || [];
+    if (suggestionsList.length) {
+      sugEl.innerHTML = suggestionsList.map((w, idx) => `<button class="sug-btn" data-idx="${idx}">${w}</button>`).join('');
+      document.querySelectorAll('.sug-btn').forEach(btn => {
+        btn.addEventListener('click', () => acceptSuggestion(btn.textContent));
+      });
+    } else {
+      sugEl.innerHTML = '<span class="empty-state">No suggestions</span>';
+    }
+
+    const sentence = state.sentence || '';
+    currentSentence = sentence;
+    const sentSpan = document.getElementById('sentenceText');
+    sentSpan.textContent = sentence || 'Your sentence will appear here...';
+    sentSpan.className = sentence ? '' : 'empty-state';
+
+    document.getElementById('statLetters').textContent = state.letter_count || 0;
+    document.getElementById('statWords').textContent = state.word_count || 0;
+  }
+
+  function acceptSuggestion(word) {
+    socket.emit('accept_suggestion', { word });
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+      e.preventDefault();
+      socket.emit('push_letter', { letter: 'space' });
+    } else if (e.code === 'Backspace') {
+      e.preventDefault();
+      socket.emit('clear_word', {});
+    } else if (e.code === 'Enter') {
+      e.preventDefault();
+      if (suggestionsList.length > 0) {
+        acceptSuggestion(suggestionsList[0]);
+      }
+    }
+  });
+
+  async function speakSentence() {
+    const text = currentSentence;
+    if (!text || text.includes('appear here')) return;
+    try {
+      await fetch('/api/v1/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      showToast('Speaking...', 'success');
+    } catch(e) { showToast('TTS error', 'error'); }
+  }
+
+  async function llmCorrect() {
+    const sentence = currentSentence;
+    if (!sentence) return;
+    const correctedDiv = document.getElementById('correctedText');
+    correctedDiv.textContent = '✨ Correcting with local LLM...';
+    try {
+      const res = await fetch('/api/v1/llm/correct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sentence })
+      });
+      const data = await res.json();
+      correctedDiv.textContent = data.corrected ? '✅ ' + data.corrected : 'No correction needed';
+      if (data.corrected) showToast('Grammar corrected', 'success');
+    } catch(e) {
+      correctedDiv.textContent = '⚠️ LLM unavailable (Ollama running?)';
+      showToast('LLM error: Ollama not running', 'error');
+    }
+  }
+
+  function exportJSON() { window.open('/api/v1/export/json'); showToast('Exporting JSON', 'success'); }
+  function exportPDF() { window.open('/api/v1/export/pdf'); showToast('Exporting PDF', 'success'); }
+  function clearAll() {
+    socket.emit('clear_sentence', {});
+    document.getElementById('correctedText').textContent = '';
+    currentSentence = '';
+    showToast('Cleared all', 'info');
+  }
+  function clearWord() { socket.emit('clear_word', {}); }
+  function space() { socket.emit('push_letter', { letter: 'space' }); }
+
+  async function checkStatus() {
+    try {
+      const res = await fetch('/api/v1/status');
+      const data = await res.json();
+      document.getElementById('deviceChip').textContent = (data.device || 'CPU').toUpperCase();
+    } catch(e) {}
+  }
+
+  clearAllBtn.onclick = clearAll;
+  clearWordBtn.onclick = clearWord;
+  spaceBtn.onclick = space;
+  speakBtn.onclick = speakSentence;
+  llmBtn.onclick = llmCorrect;
+  exportJsonBtn.onclick = exportJSON;
+  exportPdfBtn.onclick = exportPDF;
+  fullClearBtn.onclick = clearAll;
+
+  window.onload = () => {
+    updateNet();
+    checkStatus();
+    setInterval(checkStatus, 15000);
+    showToast('SignBridge ready. Turn on camera to start.', 'info');
+  };
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "SignBridge",
+  "short_name": "SignBridge",
+  "description": "Real-Time ASL Sign Language Interpreter",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0f",
+  "theme_color": "#7c6dff",
+  "icons": [
+    { "src": "icon.png", "sizes": "192x192", "type": "image/png" }
+  ]
+}
